@@ -26,6 +26,12 @@ public final class KnnTaskEntityBuilder {
         KnnTask task,
         ModifyKnnTaskDto ad) {
 
+        // Check: do not allow more than 7 shapes for the data visualisation
+        if (ad.trainLabels() != null && ad.trainLabels().size() > 7) {
+            throw new IllegalArgumentException(
+                "KNN tasks support at most 7 distinct shapes (trainLabels).");
+        }
+
         KnnTaskEntity e = new KnnTaskEntity();
         e.setTask(task);
 

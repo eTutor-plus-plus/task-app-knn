@@ -36,6 +36,12 @@ public final class KnnTaskComputation {
      */
     public boolean updateEntity(KnnTaskEntity e, ModifyKnnTaskDto ad) {
 
+        // Check: do not allow more than 7 shapes for the data visualisation
+        if (ad.trainLabels() != null && ad.trainLabels().size() > 7) {
+            throw new IllegalArgumentException(
+                "KNN tasks support at most 7 distinct shapes (trainLabels).");
+        }
+
         // Check for any change in basic configuration fields
         boolean changed =
             !Objects.equals(e.getK(),           ad.k())           ||
