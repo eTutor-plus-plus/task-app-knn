@@ -21,12 +21,12 @@ public class KnnClassifier {
     /**
      * Full constructor for specifying all KNN options.
      * @param k          Number of neighbors (k).
-     * @param p          Distance metric (1=Manhattan, 2=Euclidean, >2=Minkowski).
+     * @param p          Distance metric (1=Manhattan, 2=Euclidean, 3=Minkowski).
      * @param tiebreaker Tie-breaker ("sum", "mean", "nearest", or "alphabetical").
      */
     public KnnClassifier(int k, int p, String tiebreaker) {
         this.k = k;
-        this.p = p;
+        this.p = (p < 1) ? 3 : p; // <- Default p=3
         this.tiebreaker = tiebreaker == null ? "sum" : tiebreaker.toLowerCase();
         this.trainPoints = new ArrayList<>();
         this.trainLabels = new ArrayList<>();

@@ -151,7 +151,7 @@ public final class KnnTaskComputation {
         task.setSolution(csv);
 
         // Generate PNG images for both languages and solution/task
-        Map<String, List<int[]>> train = e.getTrainPoints();
+        Map<String, List<int[]>> train = relabelTrainPoints(e.getTrainPoints(), e.getTrainLabels());
         List<int[]> test = e.getTestPoints();
 
         String taskDe = toBase64(KnnPngExporter.generateKnnImage(
@@ -229,4 +229,17 @@ public final class KnnTaskComputation {
             throw new IllegalStateException("PNG to Base64 failed", ex);
         }
     }
+
+    /**  Remaps the keys of the train points map to match the current label list order/names. */
+    private static Map<String, List<int[]>> relabelTrainPoints(Map<String, List<int[]>> oldMap, List<String> newLabels) {
+        Map<String, List<int[]>> out = new LinkedHashMap<>();
+        int i = 0;
+        for (String newLabel : newLabels) {
+            String oldLabel = (oldMap.keySet().toArray().length > i) ? (String) oldMap.keySet().toArray()[i] : null;
+            out.put(newLabel, oldLabel != null ? oldMap.get(oldLabel) : List.of());
+            i++;
+        }
+        return out;
+    }
+
 }

@@ -36,10 +36,19 @@ public class DescriptionBuilder {
         String desc = ms.getMessage(
             "task.knn.description",
             new Object[]{
-                e.getNumTest(), e.getK(), e.getMetric(),
-                e.getxMin(), e.getxMax(), e.getyMin(), e.getyMax()
+                e.getNumTest(), e.getK(), e.getMetric(), e.getxLabel(),
+                e.getxMin(), e.getxMax(), e.getyLabel(), e.getyMin(), e.getyMax()
             },
             locale);
+
+        //Formulars for distance metrics
+        String metric = (e.getMetric() == null) ? "" : e.getMetric().trim().toLowerCase();
+        String metricFormulaKey = switch (metric) {
+            case "manhattan"    -> "task.knn.metric.formula.manhattan";
+            case "euclidean"    -> "task.knn.metric.formula.euclidean";
+            default     -> "task.knn.metric.formula.minkowski";
+        };
+        desc += "<br>" + ms.getMessage(metricFormulaKey, null, locale) + "<br>";
 
         // Explanation for tiebreaker strategy
         String tbKey = switch ((e.getTiebreaker() == null ? "sum"

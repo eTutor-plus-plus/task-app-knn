@@ -62,12 +62,12 @@ class KnnDataGeneratorTest {
         Map<String, List<int[]>> train = KnnDataGenerator.generateTrainData(
             numPerClass, xMin, xMax, yMin, yMax, labels);
 
-        // -- correct number per class --
+        // correct number per class --
         train.forEach((lbl, pts) ->
             assertEquals(numPerClass, pts.size(),
                 "wrong count for label " + lbl));
 
-        // -- all points inside the grid --
+        // all points inside the grid --
         for (List<int[]> pts : train.values()) {
             for (int[] p : pts) {
                 assertTrue(p[0] >= xMin && p[0] <= xMax,
@@ -88,7 +88,7 @@ class KnnDataGeneratorTest {
         @Test
         @DisplayName("train generation fails when grid is too small")
         void gridTooSmallForTraining() {
-            // grid has nur 4 mögliche Koordinaten
+            // grid has only 4 possible coordinates
             int xMin = 0, xMax = 1, yMin = 0, yMax = 1;
             assertThrows(IllegalArgumentException.class, () ->
                 KnnDataGenerator.generateTrainData(
@@ -98,11 +98,11 @@ class KnnDataGeneratorTest {
         @Test
         @DisplayName("test generation fails when not enough free points left")
         void gridTooSmallForTest() {
-            int xMin = 0, xMax = 1, yMin = 0, yMax = 0; // nur 2 Punkte möglich
+            int xMin = 0, xMax = 1, yMin = 0, yMax = 0;
             Map<String, List<int[]>> train = KnnDataGenerator.generateTrainData(
                 1, xMin, xMax, yMin, yMax, new String[]{"A"});
             Set<String> used = KnnDataGenerator.trainingPointsToSet(train);
-            // nur ein freier Punkt übrig → Nachfrage nach 2 sollte crashen
+            // only one free point available, should crash
             assertThrows(IllegalArgumentException.class, () ->
                 KnnDataGenerator.generateTestPoints(
                     2, xMin, xMax, yMin, yMax, used));

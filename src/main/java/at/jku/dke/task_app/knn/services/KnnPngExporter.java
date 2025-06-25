@@ -54,7 +54,7 @@ public class KnnPngExporter {
 
         // List of marker types for classes, excluding diamond (reserved for test points)
         final String[] SHAPES = new String[] {
-            "circle", "square", "triangle_up", "pentagon", "triangle_down", "star", "plus"
+            "circle", "square", "triangle_up", "plus", "star", "triangle_down", "triangle_right"
         };
 
         // Layout constants
@@ -151,7 +151,7 @@ public class KnnPngExporter {
                     case "square":      drawSquare(g, cx, cy, pointSize); break;
                     case "triangle_up": drawTriangleUp(g, cx, cy, pointSize); break;
                     case "triangle_down": drawTriangleDown(g, cx, cy, pointSize); break;
-                    case "pentagon":    drawPentagon(g, cx, cy, pointSize); break;
+                    case "triangle_right": drawTriangleRight(g, cx, cy, pointSize); break;
                     case "star":        drawStar(g, cx, cy, pointSize); break;
                     case "plus":        drawPlus(g, cx, cy, pointSize); break;
                 }
@@ -284,7 +284,7 @@ public class KnnPngExporter {
             case "square":      drawSquare(g, x, y, adjSize); break;
             case "triangle_up": drawTriangleUp(g, x, y, adjSize); break;
             case "triangle_down": drawTriangleDown(g, x, y, adjSize); break;
-            case "pentagon":    drawPentagon(g, x, y, adjSize); break;
+            case "triangle_right":    drawTriangleRight(g, x, y, adjSize); break;
             case "star":        drawStar(g, x, y, adjSize); break;
             case "plus":        drawPlus(g, x, y, adjSize); break;
             case "diamond":     drawDiamondWithNumber(g, x, y, adjSize, ""); break;
@@ -327,17 +327,13 @@ public class KnnPngExporter {
         );
         g.fillPolygon(p);
     }
-
-    private static void drawPentagon(Graphics2D g, int x, int y, int r) {
-        int n = 5;
-        int[] xs = new int[n];
-        int[] ys = new int[n];
-        for (int i = 0; i < n; i++) {
-            double a = Math.toRadians(-90 + 360.0 * i / n);
-            xs[i] = x + (int)(Math.cos(a) * r / 2.0);
-            ys[i] = y + (int)(Math.sin(a) * r / 2.0);
-        }
-        g.fillPolygon(xs, ys, n);
+    private static void drawTriangleRight(Graphics2D g, int x, int y, int r) {
+        Polygon p = new Polygon(
+            new int[]{x - r / 2, x + r / 2, x - r / 2},
+            new int[]{y - r / 2, y, y + r / 2},
+            3
+        );
+        g.fillPolygon(p);
     }
 
     private static void drawStar(Graphics2D g, int x, int y, int r) {
