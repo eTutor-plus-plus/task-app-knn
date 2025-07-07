@@ -35,8 +35,6 @@ import java.util.stream.Collectors;
 @Service
 public class EvaluationService {
 
-    /* --------------------------------------------------- constants / DI ---- */
-
     private static final Logger LOG = LoggerFactory.getLogger(EvaluationService.class);
 
     private final KnnTaskRepository         taskRepository;
@@ -52,15 +50,13 @@ public class EvaluationService {
         this.messageSource    = messageSource;
     }
 
-    /* --------------------------------------------------------- evaluate ---- */
-
     /**
      * Main entry-point for the grader.
      */
     @Transactional
     public GradingDto evaluate(SubmitSubmissionDto<KnnSubmissionDto> submission) {
 
-        /* ----------------------------- 0. Task + basic data ---------------- */
+       // Task + basic data
 
         var task = taskRepository.findById(submission.taskId())
             .orElseThrow(() -> new EntityNotFoundException(
@@ -85,7 +81,7 @@ public class EvaluationService {
                 if (providedArr[i] == null) providedArr[i] = "";
         }
 
-        /* ---------------------- 1. white-list of allowed labels ------------ */
+        // whitelist of allowed labels
 
         Set<String> allowedLabels = entityRepository.findByTaskId(task.getId())
             .map(ent -> {
@@ -102,11 +98,11 @@ public class EvaluationService {
             })
             .orElse(Set.of());
 
-        /* ------------------------- 2. syntax validation -------------------- */
+        // syntax validation
 
         Set<String> invalidLabels = new LinkedHashSet<>();
         for (String token : providedArr) {
-            if (token.isBlank()) continue;                     // blanks always allowed
+            if (token.isBlank()) continue; // blanks always allowed
             if (!allowedLabels.contains(token.toUpperCase(Locale.ROOT)))
                 invalidLabels.add(token);
         }
@@ -132,13 +128,13 @@ public class EvaluationService {
         criteria.add(new CriterionDto(msg("criterium.syntax", locale),
             null, syntaxValid, syntaxFeedback));
 
-        /* --------------- ❶  Exam / RUN mode – no grading, no points -------- */
+       //  Exam / RUN mode -> no grading, no points -------- */
 
         if (submission.mode() == SubmissionMode.RUN) {
             return new GradingDto(task.getMaxPoints(), BigDecimal.ZERO, "", criteria);
         }
 
-        /* ---------------------- 3. simple grading (level 0) ----------------- */
+        // simple grading (level 0)
 
         if (submission.feedbackLevel() == 0) {
             BigDecimal pts = syntaxValid
@@ -149,7 +145,7 @@ public class EvaluationService {
                 criteria.get(0).feedback(), criteria);
         }
 
-        /* -------------------------- 4. detailed grading -------------------- */
+        // 4. detailed grading
 
         GradingContext ctx = new GradingContext(solutionArr, providedArr,
             task.getMaxPoints(), syntaxValid);
@@ -161,7 +157,7 @@ public class EvaluationService {
             }
         }
 
-        /* ----------------------- 5. assemble response ---------------------- */
+        // assemble response
 
         String overall = (syntaxValid && ctx.incorrect == 0)
             ? msg("correct", locale)
@@ -173,8 +169,8 @@ public class EvaluationService {
         return new GradingDto(task.getMaxPoints(), ctx.totalPoints, overall, criteria);
     }
 
-    /* ====================================================================== */
-    /* === helpers ========================================================== */
+
+    // helpers
 
     /** Container holding counters needed across several helper methods. */
     private static class GradingContext {
@@ -257,7 +253,7 @@ public class EvaluationService {
             return;
         }
 
-        /* -------- parse training & test data from the entity -------------- */
+        // parse training & test data from the entity
 
         Map<String, List<int[]>> trainMap;
         List<int[]>              testPoints;
@@ -278,7 +274,7 @@ public class EvaluationService {
             pts.forEach(__ -> trainLbls.add(lbl));
         });
 
-        /* ------------------ run classifier for every test-point ----------- */
+        // run classifier for every test-point
 
         int p = switch (entity.getMetric().toLowerCase()) {
             case "manhattan" -> 1;
@@ -307,7 +303,7 @@ public class EvaluationService {
             KnnClassifier.KNNResult res = knn.explainPoint(
                 testPoints.get(i), entity.getTiebreaker());
 
-            /* ---------- build tiny HTML explanation for feedback ---------- */
+           // build tiny HTML explanation for feedback
 
             StringBuilder html = new StringBuilder();
             html.append("<div>");
@@ -348,7 +344,7 @@ public class EvaluationService {
         ctx.totalPoints = ctx.totalPoints.setScale(2, RoundingMode.HALF_UP);
     }
 
-    /* ---------------------- embed solution screenshot (lvl 3) ------------- */
+    // embed solution screenshot (lvl 3)
 
     private String embedSolutionImage(String fb, Locale loc,
                                       KnnTask task) {
@@ -365,7 +361,7 @@ public class EvaluationService {
         }).orElse(fb);
     }
 
-    /* --------------------------- i18n helpers ----------------------------- */
+    // i18n helpers
 
     private String msg(String code, Locale loc, Object... args) {
         return messageSource.getMessage(code, args, loc);

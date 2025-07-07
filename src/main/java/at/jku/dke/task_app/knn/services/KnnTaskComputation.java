@@ -10,6 +10,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Computes, updates, and generates knn task data.
@@ -41,18 +42,21 @@ public final class KnnTaskComputation {
             throw new IllegalArgumentException(
                 "KNN tasks support at most 7 distinct shapes (trainLabels).");
         }
+        // take a snapshot of fields before change
+        int  oldNumTrain = e.getNumTrain();
+        int  oldNumTest  = e.getNumTest();
+        int  oldXMin = e.getxMin(), oldXMax = e.getxMax();
+        int  oldYMin = e.getyMin(), oldYMax = e.getyMax();
 
-        // Check for any change in basic configuration fields
-        boolean changed =
-            !Objects.equals(e.getK(),           ad.k())           ||
-                !Objects.equals(e.getMetric(),      ad.metric())      ||
-                !Objects.equals(e.getTiebreaker(),  ad.tiebreaker())  ||
-                !Objects.equals(e.getxMin(),        ad.xMin())        ||
-                !Objects.equals(e.getxMax(),        ad.xMax())        ||
-                !Objects.equals(e.getyMin(),        ad.yMin())        ||
-                !Objects.equals(e.getyMax(),        ad.yMax())        ||
-                !Objects.equals(e.getNumTrain(),    ad.numTrain())    ||
-                !Objects.equals(e.getNumTest(),     ad.numTest());
+        List<String>           oldLabels = Optional.ofNullable(e.getTrainLabels()).orElse(List.of());
+        Map<String,List<int[]>>oldTrain  = Optional.ofNullable(e.getTrainPoints()).orElse(Map.of());
+        List<int[]>            oldTest   = Optional.ofNullable(e.getTestPoints()).orElse(List.of());
+
+        boolean labelsChanged   = ad.trainLabels() != null && !Objects.equals(oldLabels, ad.trainLabels());
+        boolean numTrainChanged = oldNumTrain != ad.numTrain();
+        boolean numTestChanged  = oldNumTest  != ad.numTest();
+        boolean rangeChanged    = oldXMin != ad.xMin() || oldXMax != ad.xMax()
+            || oldYMin != ad.yMin() || oldYMax != ad.yMax();
 
         // Copy basic fields
         e.setK(ad.k());
@@ -64,69 +68,121 @@ public final class KnnTaskComputation {
         e.setNumTrain(ad.numTrain());
         e.setNumTest (ad.numTest());
 
-        // Handle training points
-        if (ad.trainLabels() != null)
-            e.setTrainLabels(ad.trainLabels());
+        boolean changed = false;
 
+        // DTO-train handling
+        Map<String,List<int[]>> dtoTrain = null;
+        boolean dtoFits = false;
         if (ad.trainPoints() != null) {
-            // Check if number of points matches the expected count
-            int expected = ad.numTrain() * e.getTrainLabels().size();
-            int actual   = ad.trainPoints().stream().mapToInt(g -> g.getPoints().size()).sum();
+            dtoTrain = TrainPointGroup.groupListToMap(ad.trainPoints());
+            dtoFits  = dtoTrain.values().stream().allMatch(l -> l.size() == ad.numTrain());
+        }
 
-            if (expected != actual) {
-                // Mismatch: generate new training data
-                e.setTrainPoints(
-                    KnnDataGenerator.generateTrainData(
-                        ad.numTrain(),
-                        ad.xMin(), ad.xMax(),
-                        ad.yMin(), ad.yMax(),
-                        e.getTrainLabels().toArray(new String[0])));
-                changed = true;
-            } else {
-                // Use provided training points, check if changed
-                Map<String,List<int[]>> old = e.getTrainPoints();
-                Map<String,List<int[]>> neu = TrainPointGroup.groupListToMap(ad.trainPoints());
-                if (!Objects.equals(old, neu)) changed = true;
-                e.setTrainPoints(neu);
-            }
-        } else if (e.getTrainPoints().size() != ad.numTrain()) {
-            // No list provided, but number changed: generate new data
+
+       // case 1: numTrain change  → full regeneration (unless DTO exact)
+        if (numTrainChanged && !dtoFits) {
+            List<String> lbls = ad.trainLabels() != null ? ad.trainLabels() : oldLabels;
             e.setTrainPoints(
                 KnnDataGenerator.generateTrainData(
-                    ad.numTrain(),
-                    ad.xMin(), ad.xMax(),
-                    ad.yMin(), ad.yMax(),
-                    e.getTrainLabels().toArray(new String[0])));
+                    ad.numTrain(), ad.xMin(), ad.xMax(), ad.yMin(), ad.yMax(),
+                    lbls.toArray(new String[0])
+                )
+            );
+            if (labelsChanged) e.setTrainLabels(lbls);
             changed = true;
         }
 
-        // Handle test points (same logic as training points)
-        if (ad.testPoints() != null) {
-            if (ad.testPoints().size() != ad.numTest()) {
-                // Mismatch: generate new test data
-                e.setTestPoints(
-                    KnnDataGenerator.generateTestPoints(
-                        ad.numTest(),
-                        ad.xMin(), ad.xMax(),
-                        ad.yMin(), ad.yMax(),
-                        KnnDataGenerator.trainingPointsToSet(e.getTrainPoints())));
-                changed = true;
-            } else {
-                if (!Objects.equals(e.getTestPoints(), ad.testPoints()))
-                    changed = true;
-                e.setTestPoints(ad.testPoints());
+
+        // case 2: label rename
+        else if (labelsChanged) {
+            List<String> newL = ad.trainLabels();
+            Map<String,List<int[]>> tmp = new LinkedHashMap<>();
+
+            for (int i = 0; i < newL.size(); i++) {
+                String nl  = newL.get(i);
+                List<int[]> pts = dtoTrain != null ? dtoTrain.get(nl) : null;
+                if ((pts == null || pts.isEmpty()) && i < oldLabels.size())
+                    pts = oldTrain.getOrDefault(oldLabels.get(i), List.of());
+                tmp.put(nl, pts != null ? new ArrayList<>(pts) : new ArrayList<>());
             }
-        } else if (e.getTestPoints().size() != ad.numTest()) {
-            e.setTestPoints(
-                KnnDataGenerator.generateTestPoints(
-                    ad.numTest(),
-                    ad.xMin(), ad.xMax(),
-                    ad.yMin(), ad.yMax(),
-                    KnnDataGenerator.trainingPointsToSet(e.getTrainPoints())));
+            e.setTrainLabels(newL);
+            e.setTrainPoints(tmp);
             changed = true;
         }
 
-        return changed; // Triggers regeneration of images and solution if true
+        // case 3:  DTO train-points exact
+        else if (dtoTrain != null) {
+            Set<String> allowed = new HashSet<>(e.getTrainLabels());
+            dtoTrain.keySet().removeIf(k -> !allowed.contains(k));
+            for (String l : allowed) dtoTrain.putIfAbsent(l, new ArrayList<>());
+            e.setTrainPoints(dtoTrain);
+            changed = true;
+        }
+
+        // case 4: fallback (size mismatch) regen
+        else if (e.getTrainPoints().values().stream().anyMatch(l -> l.size() != ad.numTrain())) {
+            e.setTrainPoints(
+                KnnDataGenerator.generateTrainData(
+                    ad.numTrain(), ad.xMin(), ad.xMax(), ad.yMin(), ad.yMax(),
+                    e.getTrainLabels().toArray(new String[0])
+                )
+            );
+            changed = true;
+        }
+
+       // case 5: axis-range adjustments for train points
+        if (rangeChanged) {
+            Map<String,List<int[]>> fixed = new LinkedHashMap<>();
+            for (String lbl : e.getTrainLabels()) {
+                List<int[]> kept = e.getTrainPoints().getOrDefault(lbl, List.of())
+                    .stream()
+                    .filter(p -> p[0] >= ad.xMin() && p[0] <= ad.xMax()
+                        && p[1] >= ad.yMin() && p[1] <= ad.yMax())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+                if (kept.size() > ad.numTrain())
+                    kept = kept.subList(0, ad.numTrain());
+                while (kept.size() < ad.numTrain()) {
+                    kept.addAll(
+                        KnnDataGenerator.generateTrainData(
+                            ad.numTrain() - kept.size(),
+                            ad.xMin(), ad.xMax(), ad.yMin(), ad.yMax(),
+                            new String[]{lbl}).get(lbl)
+                    );
+                }
+                fixed.put(lbl, kept);
+            }
+            e.setTrainPoints(fixed);
+            changed = true;
+        }
+
+       // case 6: axis-range adjustments for TEST points
+        {
+            // source = DTO if sent, else current points
+            List<int[]> src = ad.testPoints() != null
+                ? new ArrayList<>(ad.testPoints())
+                : new ArrayList<>(e.getTestPoints());
+
+            List<int[]> kept = src.stream()
+                .filter(p -> p[0] >= ad.xMin() && p[0] <= ad.xMax()
+                    && p[1] >= ad.yMin() && p[1] <= ad.yMax())
+                .collect(Collectors.toCollection(ArrayList::new));
+
+            if (kept.size() > ad.numTest())
+                kept = kept.subList(0, ad.numTest());
+            while (kept.size() < ad.numTest()) {
+                kept.addAll(
+                    KnnDataGenerator.generateTestPoints(
+                        ad.numTest() - kept.size(),
+                        ad.xMin(), ad.xMax(), ad.yMin(), ad.yMax(),
+                        KnnDataGenerator.trainingPointsToSet(e.getTrainPoints()))
+                );
+            }
+            e.setTestPoints(kept);
+            changed = true;
+        }
+
+        return changed;
     }
 
     /**
@@ -151,7 +207,7 @@ public final class KnnTaskComputation {
         task.setSolution(csv);
 
         // Generate PNG images for both languages and solution/task
-        Map<String, List<int[]>> train = relabelTrainPoints(e.getTrainPoints(), e.getTrainLabels());
+        Map<String, List<int[]>> train = e.getTrainPoints();
         List<int[]> test = e.getTestPoints();
 
         String taskDe = toBase64(KnnPngExporter.generateKnnImage(
@@ -228,18 +284,6 @@ public final class KnnTaskComputation {
         } catch (Exception ex) {
             throw new IllegalStateException("PNG to Base64 failed", ex);
         }
-    }
-
-    /**  Remaps the keys of the train points map to match the current label list order/names. */
-    private static Map<String, List<int[]>> relabelTrainPoints(Map<String, List<int[]>> oldMap, List<String> newLabels) {
-        Map<String, List<int[]>> out = new LinkedHashMap<>();
-        int i = 0;
-        for (String newLabel : newLabels) {
-            String oldLabel = (oldMap.keySet().toArray().length > i) ? (String) oldMap.keySet().toArray()[i] : null;
-            out.put(newLabel, oldLabel != null ? oldMap.get(oldLabel) : List.of());
-            i++;
-        }
-        return out;
     }
 
 }
