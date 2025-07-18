@@ -9,7 +9,6 @@ import java.util.*;
  * </p>
  */
 public class KnnDataGenerator {
-
     /**
      * Generates unique random training data for each class label.
      * Each class gets {@code numPerClass} unique points within the 2D grid.
@@ -88,6 +87,7 @@ public class KnnDataGenerator {
 
     /**
      * Converts a map of training points to a set of "x/y" coordinate strings for uniqueness checks.
+     *
      *
      * @param trainMap Map from label to list of points.
      * @return Set of "x/y" coordinate strings.
